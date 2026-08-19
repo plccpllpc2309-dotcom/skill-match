@@ -105,7 +105,7 @@ export default function App() {
   const [newSkill, setNewSkill] = useState({ name: '', level: 2 });
   const [reviewState, setReviewState] = useState(null);
   const [matchPanel, setMatchPanel] = useState(null); // { postId, loading, suggestions }
-
+  const [profileView, setProfileView] = useState(null); // { loading, user, error }
   useEffect(() => {
     if (!banner) return;
     const t = setTimeout(() => setBanner(null), 3500);
@@ -188,6 +188,16 @@ export default function App() {
     await api.postAction(postId, 'deny', userId).catch(() => {});
     refreshAll();
   }
+
+  async function openProfile(userId) {
+  setProfileView({ loading: true, user: null });
+  try {
+    const r = await api.getUser(userId);
+    setProfileView({ loading: false, user: r.user });
+  } catch {
+    setProfileView({ loading: false, user: null, error: true });
+  }
+}
 
   function addSkillToNewPost() {
     const s = skillInput.trim();
@@ -761,6 +771,57 @@ export default function App() {
           </div>
         </div>
       )}
+      {profileView && (
+  <div className="fixed inset-0 z-30 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(28,25,23,0.5)' }} onClick={() => setProfileView(null)}>
+    <div className="bg-white rounded-xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      {profileView.loading ? (
+        <div className="text-center py-10 text-stone-400 text-sm">Đang tải hồ sơ...</div>
+      ) : profileView.error || !profileView.user ? (
+        <div className="text-center py-10 text-stone-400 text-sm">Không tải được hồ sơ.</div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <div />
+            <button onClick={() => setProfileView(null)}><X size={16} className="text-stone-400" /></button>
+          </div>
+          <div className="flex flex-col items-center text-center mb-5">
+            <ReputationRing score={avgScore(profileView.user.reviews)} size={90} stroke={7} />
+            <h2 className="font-bold text-lg mt-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{profileView.user.name}</h2>
+            <p className="text-sm text-stone-500">Sinh viên năm {profileView.user.year}</p>
+            <div className="mt-2"><CategoryChip id={profileView.user.category} /></div>
+            <div className="text-xs text-stone-400 mt-2">{(profileView.user.reviews || []).length} đánh giá đã nhận</div>
+          </div>
+
+          <h3 className="font-semibold text-stone-800 mb-2 text-sm">Kỹ năng</h3>
+          <div className="flex flex-wrap gap-2 mb-5">
+            {(profileView.user.skills || []).map((s) => (
+              <span key={s.name} className="text-xs px-2.5 py-1.5 rounded-lg border bg-stone-50 text-stone-700 flex items-center gap-1" style={{ borderColor: '#e7e5e4' }}>
+                {s.name}<LevelDots level={s.level} />
+              </span>
+            ))}
+            {(profileView.user.skills || []).length === 0 && <span className="text-xs text-stone-400">Chưa có kỹ năng nào.</span>}
+          </div>
+
+          <h3 className="font-semibold text-stone-800 mb-2 text-sm">Lịch sử đồ án</h3>
+          <div className="space-y-2">
+            {(profileView.user.projects || []).map((p) => (
+              <div key={p.id} className="flex items-center justify-between text-sm border rounded-lg px-3 py-2" style={{ borderColor: '#f0efec' }}>
+                <div>
+                  <div className="font-medium text-stone-800">{p.title}</div>
+                  <div className="text-xs text-stone-400">{p.is_owner ? 'Trưởng nhóm' : 'Thành viên'}</div>
+                </div>
+                <span className={`text-xs font-medium px-2 py-1 rounded-full ${p.status === 'completed' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {p.status === 'completed' ? 'Hoàn thành' : 'Đang mở'}
+                </span>
+              </div>
+            ))}
+            {(profileView.user.projects || []).length === 0 && <p className="text-xs text-stone-400">Chưa tham gia đồ án nào.</p>}
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+    )}
     </div>
   );
 }
