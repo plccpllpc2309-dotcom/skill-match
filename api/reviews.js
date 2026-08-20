@@ -27,17 +27,16 @@ export default withCors(async function handler(req, res) {
   );
   if (memberRes.rows.length !== 2) return res.status(403).json({ error: 'both_users_must_be_members' });
 
-  const existingRes = await query(
-    'select 1 from reviews where post_id = $1 and reviewer_id = $2 and target_user_id = $3',
-    [postId, me.id, targetUserId]
-  );
-  if (existingRes.rows[0]) return res.status(409).json({ error: 'already_reviewed' });
-
-  await query(
-    `insert into reviews (post_id, reviewer_id, target_user_id, contribution, punctual, skill, comment)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
-    [postId, me.id, targetUserId, contribution, punctual, skill, comment ? String(comment).trim() : null]
-  );
+  try {
+    await query(
+      `insert into reviews (post_id, reviewer_id, target_user_id, contribution, punctual, skill, comment)
+       values ($1, $2, $3, $4, $5, $6, $7)`,
+      [postId, me.id, targetUserId, contribution, punctual, skill, comment ? String(comment).trim() : null]
+    );
+  } catch (error) {
+    if (error?.code === '23505') return res.status(409).json({ error: 'already_reviewed' });
+    throw error;
+  }
 
   res.status(201).json({ ok: true });
 });
