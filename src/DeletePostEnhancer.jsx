@@ -2,8 +2,9 @@ import { useEffect } from 'react';
 import { api } from './api';
 
 /**
- * Adds the delete action to the existing "Bài đăng của tôi" cards without
- * duplicating the post list in a second React state tree.
+ * Adds the delete action to the existing "Bài đăng của tôi" cards.
+ * The main App remains the source of truth for the post list; this component
+ * only attaches the owner action to the already-rendered cards.
  */
 export default function DeletePostEnhancer() {
   useEffect(() => {
@@ -13,7 +14,8 @@ export default function DeletePostEnhancer() {
     async function loadPosts() {
       try {
         const result = await api.listPosts();
-        if (!cancelled) posts = result.posts || [];
+        if (cancelled) return;
+        posts = result.posts || [];
         injectButtons();
       } catch {
         // The main application already handles data-loading errors.
@@ -23,23 +25,29 @@ export default function DeletePostEnhancer() {
     function injectButtons() {
       if (cancelled) return;
 
-      const headings = [...document.querySelectorAll('h2')];
-      const heading = headings.find((el) => el.textContent?.trim() === 'Bài đăng của tôi');
+      const heading = [...document.querySelectorAll('h2')]
+        .find((el) => el.textContent?.trim() === 'Bài đăng của tôi');
       if (!heading) return;
 
       const section = heading.parentElement;
       const cards = [...section.querySelectorAll('.space-y-4 > div')];
-      const ownedPosts = posts.filter((post) => post.ownerId === getCurrentUserId());
+      const usedPostIds = new Set();
 
-      cards.forEach((card, index) => {
+      cards.forEach((card) => {
         if (card.querySelector('[data-delete-post-button]')) return;
-        const post = ownedPosts[index];
-        if (!post) return;
 
-        const title = card.querySelector('h3');
+        const title = card.querySelector('h3')?.textContent?.trim();
         if (!title) return;
 
-        const header = title.parentElement;
+        // The cards in this section are already filtered by App to the current
+        // user's posts. Match by title while keeping duplicate titles distinct.
+        const post = posts.find((candidate) =>
+          !usedPostIds.has(candidate.id) && candidate.title === title
+        );
+        if (!post) return;
+        usedPostIds.add(post.id);
+
+        const header = card.querySelector('h3')?.parentElement;
         if (!header) return;
 
         const status = header.querySelector('span');
@@ -86,18 +94,7 @@ export default function DeletePostEnhancer() {
       });
     }
 
-    function getCurrentUserId() {
-      // The API result contains ownerId, and the current user's own posts are
-      // the cards rendered by the main App. We only need the ordered list here.
-      // Returning null would hide all buttons, so derive the owner from the
-      // first post and use the same owner for the owned-post filter below.
-      const first = posts[0];
-      if (!first) return null;
-      const candidate = posts.find((post) => post.ownerId);
-      return candidate?.ownerId || null;
-    }
-
-    const observer = new MutationObserver(() => injectButtons());
+    const observer = new MutationObserver(injectButtons);
     observer.observe(document.body, { childList: true, subtree: true });
 
     loadPosts();
