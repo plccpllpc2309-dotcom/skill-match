@@ -35,8 +35,33 @@ export default withCors(async function handler(req, res) {
 
   if (action === 'approve') {
     if (!userId) return res.status(400).json({ error: 'missing_userId' });
-    if (memberIds.length >= post.slots) return res.status(400).json({ error: 'post_full' });
-    await query('insert into post_members (post_id, user_id) values ($1, $2) on conflict do nothing', [id, userId]);
+
+    const insertRes = await query(
+      `insert into post_members (post_id, user_id)
+       select $1, $2
+       where exists (
+         select 1 from join_requests
+         where post_id = $1 and user_id = $2
+       )
+       and (
+         select count(*) from post_members where post_id = $1
+       ) < $3
+       on conflict (post_id, user_id) do nothing
+       returning user_id`,
+      [id, userId, post.slots]
+    );
+
+    if (insertRes.rowCount === 0) {
+      const requestRes = await query(
+        'select 1 from join_requests where post_id = $1 and user_id = $2',
+        [id, userId]
+      );
+      if (requestRes.rowCount === 0) {
+        return res.status(400).json({ error: 'request_not_found' });
+      }
+      return res.status(400).json({ error: 'post_full' });
+    }
+
     await query('delete from join_requests where post_id = $1 and user_id = $2', [id, userId]);
     return res.status(200).json({ ok: true });
   }
