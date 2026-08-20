@@ -1,4 +1,4 @@
-import { query } from '../../_lib/db.js';
+import { query, withTransaction } from '../../_lib/db.js';
 import { requireAuth, withCors } from '../../_lib/auth.js';
 
 export default withCors(async function handler(req, res) {
@@ -36,33 +36,48 @@ export default withCors(async function handler(req, res) {
   if (action === 'approve') {
     if (!userId) return res.status(400).json({ error: 'missing_userId' });
 
-    const insertRes = await query(
-      `insert into post_members (post_id, user_id)
-       select $1, $2
-       where exists (
-         select 1 from join_requests
-         where post_id = $1 and user_id = $2
-       )
-       and (
-         select count(*) from post_members where post_id = $1
-       ) < $3
-       on conflict (post_id, user_id) do nothing
-       returning user_id`,
-      [id, userId, post.slots]
-    );
+    const approval = await withTransaction(async (client) => {
+      // Lock the post row so concurrent approvals for this project are serialized.
+      const lockedPostRes = await client.query(
+        'select slots from posts where id = $1 for update',
+        [id]
+      );
+      const lockedPost = lockedPostRes.rows[0];
+      if (!lockedPost) return { error: 'not_found' };
 
-    if (insertRes.rowCount === 0) {
-      const requestRes = await query(
+      const requestRes = await client.query(
         'select 1 from join_requests where post_id = $1 and user_id = $2',
         [id, userId]
       );
-      if (requestRes.rowCount === 0) {
-        return res.status(400).json({ error: 'request_not_found' });
-      }
-      return res.status(400).json({ error: 'post_full' });
-    }
+      if (requestRes.rowCount === 0) return { error: 'request_not_found' };
 
-    await query('delete from join_requests where post_id = $1 and user_id = $2', [id, userId]);
+      const countRes = await client.query(
+        'select count(*)::int as count from post_members where post_id = $1',
+        [id]
+      );
+      if (countRes.rows[0].count >= lockedPost.slots) return { error: 'post_full' };
+
+      const insertRes = await client.query(
+        `insert into post_members (post_id, user_id)
+         values ($1, $2)
+         on conflict (post_id, user_id) do nothing
+         returning user_id`,
+        [id, userId]
+      );
+
+      if (insertRes.rowCount === 0) return { error: 'already_member' };
+
+      await client.query(
+        'delete from join_requests where post_id = $1 and user_id = $2',
+        [id, userId]
+      );
+      return { ok: true };
+    });
+
+    if (approval.error === 'not_found') return res.status(404).json({ error: 'not_found' });
+    if (approval.error === 'request_not_found') return res.status(400).json({ error: 'request_not_found' });
+    if (approval.error === 'post_full') return res.status(400).json({ error: 'post_full' });
+    if (approval.error === 'already_member') return res.status(400).json({ error: 'already_member' });
     return res.status(200).json({ ok: true });
   }
 
