@@ -38,4 +38,5 @@ export const api = {
 
   submitReview: (body) => call('/reviews', { method: 'POST', body: JSON.stringify(body) }),
   leaderboard: () => call('/users/leaderboard'),
+  getUser: (id) => call(`/users/${id}`),
 };

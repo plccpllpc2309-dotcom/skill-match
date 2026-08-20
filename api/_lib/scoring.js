@@ -8,6 +8,15 @@ export function avgScore(reviews) {
 function normalize(s) {
   return s.trim().toLowerCase();
 }
+function skillsMatch(a, b) {
+  if (a === b) return true;
+  const wordsA = a.split(/\s+/);
+  const wordsB = b.split(/\s+/);
+  return wordsA.length > 1 ? wordsA.includes(b) : wordsB.includes(a);
+}
+// in skillOverlapScore, replace:
+// const match = cand.find((c) => c.name.includes(n) || n.includes(c.name));
+
 
 // Skill overlap score (0-100) between a post's needed skills (array of strings)
 // and a candidate's skills (array of {name, level 1-3}).
@@ -20,7 +29,7 @@ export function skillOverlapScore(skillsNeeded, candidateSkills) {
   let total = 0;
   for (const needed of skillsNeeded) {
     const n = normalize(needed);
-    const match = cand.find((c) => c.name.includes(n) || n.includes(c.name));
+    const match = cand.find((c) => skillsMatch(c.name, n));
     if (match) {
       total += (match.level / 3) * 100; // level 1..3 -> 33/66/100
     }
