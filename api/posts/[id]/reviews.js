@@ -31,8 +31,6 @@ export default withCors(async function handler(req, res) {
     return res.status(200).json({ post, target: memberRes.rows.find((m) => m.id === targetUserId), reviews: reviewsRes.rows });
   }
 
-  if (!memberRes.rows.some((m) => m.id === me.id)) return res.status(403).json({ error: 'not_a_member' });
-
   const reviewsRes = await query(
     `select r.id, r.target_user_id, r.contribution, r.punctual, r.skill, r.comment, r.created_at,
             ru.id as reviewer_id, ru.name as reviewer_name,
