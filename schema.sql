@@ -53,9 +53,12 @@ create table if not exists reviews (
   contribution int not null check (contribution between 1 and 5),
   punctual int not null check (punctual between 1 and 5),
   skill int not null check (skill between 1 and 5),
-  created_at timestamptz not null default now()
+  comment text,
+  created_at timestamptz not null default now(),
+  unique (post_id, reviewer_id, target_user_id)
 );
 
 create index if not exists idx_skills_user on skills(user_id);
 create index if not exists idx_posts_status on posts(status);
 create index if not exists idx_reviews_target on reviews(target_user_id);
+create index if not exists idx_reviews_post_target on reviews(post_id, target_user_id);
