@@ -12,14 +12,31 @@ export default withCors(async function handler(req, res) {
   const post = rows[0];
   if (!post) return res.status(404).json({ error: 'not_found' });
 
-  const membersRes = await query('select user_id from post_members where post_id = $1', [id]);
-  const memberIds = membersRes.rows.map((r) => r.user_id);
-
   if (action === 'request_join') {
-    if (post.status !== 'open') return res.status(400).json({ error: 'project_completed' });
-    if (post.owner_id === me.id || memberIds.includes(me.id)) return res.status(400).json({ error: 'already_involved' });
-    if (memberIds.length >= post.slots) return res.status(400).json({ error: 'post_full' });
-    await query(`insert into join_requests (post_id, user_id) values ($1, $2) on conflict (post_id, user_id) do nothing`, [id, me.id]);
+    const result = await withTransaction(async (client) => {
+      const locked = await client.query('select status, owner_id, slots from posts where id = $1 for update', [id]);
+      const current = locked.rows[0];
+      if (!current) return { error: 'not_found' };
+      if (current.status !== 'open') return { error: 'project_completed' };
+      if (current.owner_id === me.id) return { error: 'already_involved' };
+
+      const member = await client.query('select 1 from post_members where post_id = $1 and user_id = $2', [id, me.id]);
+      if (member.rowCount > 0) return { error: 'already_involved' };
+
+      const count = await client.query('select count(*)::int as count from post_members where post_id = $1', [id]);
+      if (count.rows[0].count >= current.slots) return { error: 'post_full' };
+
+      await client.query(
+        `insert into join_requests (post_id, user_id) values ($1, $2)
+         on conflict (post_id, user_id) do nothing`,
+        [id, me.id]
+      );
+      return { ok: true };
+    });
+    if (result.error === 'not_found') return res.status(404).json({ error: 'not_found' });
+    if (result.error === 'project_completed') return res.status(400).json({ error: 'project_completed' });
+    if (result.error === 'already_involved') return res.status(400).json({ error: 'already_involved' });
+    if (result.error === 'post_full') return res.status(400).json({ error: 'post_full' });
     return res.status(200).json({ ok: true });
   }
 
