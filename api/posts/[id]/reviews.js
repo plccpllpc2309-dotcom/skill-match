@@ -8,9 +8,7 @@ export default withCors(async function handler(req, res) {
 
   const { id, targetUserId } = req.query;
 
-  // Keep this endpoint deliberately dependent only on columns that are part of
-  // the original MVP schema. This avoids a 500 if an older Neon DB is missing
-  // an optional metadata column such as reviews.created_at.
+  // Keep this endpoint dependent only on the existing MVP schema.
   const postRes = await query(
     'select id, title, description, category, skills_needed, status, owner_id from posts where id = $1',
     [id]
@@ -42,24 +40,16 @@ export default withCors(async function handler(req, res) {
 
     return res.status(200).json({
       post: {
-        id: post.id,
-        title: post.title,
-        description: post.description,
-        category: post.category,
-        skillsNeeded: post.skills_needed,
-        status: post.status,
-        ownerId: post.owner_id,
+        id: post.id, title: post.title, description: post.description,
+        category: post.category, skillsNeeded: post.skills_needed,
+        status: post.status, ownerId: post.owner_id,
       },
       target,
       reviews: reviewsRes.rows,
     });
   }
 
-  // Full project review matrix is restricted to project members.
-  if (!memberRes.rows.some((m) => m.id === me.id)) {
-    return res.status(403).json({ error: 'not_a_member' });
-  }
-
+  // Project details/reviews can be viewed from any project card in the app.
   const reviewsRes = await query(
     `select r.target_user_id, r.contribution, r.punctual, r.skill, r.comment,
             ru.id as reviewer_id, ru.name as reviewer_name,
@@ -79,13 +69,9 @@ export default withCors(async function handler(req, res) {
 
   return res.status(200).json({
     post: {
-      id: post.id,
-      title: post.title,
-      description: post.description,
-      category: post.category,
-      skillsNeeded: post.skills_needed,
-      status: post.status,
-      ownerId: post.owner_id,
+      id: post.id, title: post.title, description: post.description,
+      category: post.category, skillsNeeded: post.skills_needed,
+      status: post.status, ownerId: post.owner_id,
     },
     members: memberRes.rows,
     myReviewTargetIds: mineRes.rows.map((r) => r.target_user_id),
