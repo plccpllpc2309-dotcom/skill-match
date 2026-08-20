@@ -4,6 +4,7 @@ import { requireAuth, withCors } from '../../_lib/auth.js';
 export default withCors(async function handler(req, res) {
   const me = await requireAuth(req, res);
   if (!me) return;
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   const { id } = req.query;
@@ -28,7 +29,6 @@ export default withCors(async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  // Remaining actions require being the post owner
   if (post.owner_id !== me.id) {
     return res.status(403).json({ error: 'not_owner' });
   }
@@ -48,7 +48,9 @@ export default withCors(async function handler(req, res) {
   }
 
   if (action === 'complete') {
-    await query('update posts set status = $1 where id = $2', ['completed', id]);
+    if (post.owner_id !== me.id) return res.status(403).json({ error: 'not_owner' });
+    if (post.status !== 'open') return res.status(400).json({ error: 'already_completed' });
+    await query('update posts set status = $1 where id = $2 and owner_id = $3', ['completed', id, me.id]);
     return res.status(200).json({ ok: true });
   }
 
