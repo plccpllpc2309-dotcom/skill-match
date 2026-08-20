@@ -8,7 +8,6 @@ export default withCors(async function handler(req, res) {
 
   const { id, targetUserId } = req.query;
 
-  // Keep this endpoint dependent only on the existing MVP schema.
   const postRes = await query(
     'select id, title, description, category, skills_needed, status, owner_id from posts where id = $1',
     [id]
@@ -21,20 +20,33 @@ export default withCors(async function handler(req, res) {
      from post_members pm
      join users u on u.id = pm.user_id
      where pm.post_id = $1
-     order by u.name`,
+     order by pm.joined_at`,
     [id]
   );
 
+  const members = memberRes.rows;
+  const allParticipants = [
+    { id: post.owner_id, name: null, year: null, category: null, isOwner: true },
+    ...members.map((m) => ({ ...m, isOwner: false })),
+  ];
+
+  const ownerRes = await query(
+    'select id, name, year, category from users where id = $1',
+    [post.owner_id]
+  );
+  if (ownerRes.rows[0]) allParticipants[0] = { ...ownerRes.rows[0], isOwner: true };
+
   if (targetUserId) {
-    const target = memberRes.rows.find((m) => m.id === targetUserId);
+    const target = allParticipants.find((m) => String(m.id) === String(targetUserId));
     if (!target) return res.status(400).json({ error: 'target_not_a_member' });
 
     const reviewsRes = await query(
-      `select r.contribution, r.punctual, r.skill, r.comment,
+      `select r.id, r.contribution, r.punctual, r.skill, r.comment, r.created_at,
               u.id as reviewer_id, u.name as reviewer_name
        from reviews r
        join users u on u.id = r.reviewer_id
-       where r.post_id = $1 and r.target_user_id = $2`,
+       where r.post_id = $1 and r.target_user_id = $2
+       order by r.created_at desc`,
       [id, targetUserId]
     );
 
@@ -49,7 +61,9 @@ export default withCors(async function handler(req, res) {
     });
   }
 
-  // Project details/reviews can be viewed from any project card in the app.
+  const isParticipant = String(me.id) === String(post.owner_id) || members.some((m) => String(m.id) === String(me.id));
+  if (!isParticipant) return res.status(403).json({ error: 'not_a_member' });
+
   const reviewsRes = await query(
     `select r.target_user_id, r.contribution, r.punctual, r.skill, r.comment,
             ru.id as reviewer_id, ru.name as reviewer_name,
@@ -73,7 +87,8 @@ export default withCors(async function handler(req, res) {
       category: post.category, skillsNeeded: post.skills_needed,
       status: post.status, ownerId: post.owner_id,
     },
-    members: memberRes.rows,
+    members,
+    participants: allParticipants,
     myReviewTargetIds: mineRes.rows.map((r) => r.target_user_id),
     reviewDetails: reviewsRes.rows,
   });
