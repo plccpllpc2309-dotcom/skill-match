@@ -37,6 +37,7 @@ export const api = {
   matchCandidates: (id) => call(`/posts/${id}/match`),
 
   submitReview: (body) => call('/reviews', { method: 'POST', body: JSON.stringify(body) }),
+  getProjectReviews: (id, targetUserId) => call(`/posts/${id}/reviews${targetUserId ? `?targetUserId=${targetUserId}` : ''}`),
   leaderboard: () => call('/users/leaderboard'),
   getUser: (id) => call(`/users/${id}`),
 };
