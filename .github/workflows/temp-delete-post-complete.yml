@@ -1,0 +1,165 @@
+name: Complete delete-post feature
+
+on:
+  push:
+    branches:
+      - feature/delete-post
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "!contains(github.event.head_commit.message, '[delete-post-complete]')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/delete-post
+          fetch-depth: 0
+
+      - name: Patch delete-post implementation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # ---------------- src/api.js ----------------
+          path = Path('src/api.js')
+          text = path.read_text(encoding='utf-8')
+          old = """  postAction: (id, action, userId) =>
+    call(`/posts/${id}/action`, { method: 'POST', body: JSON.stringify({ action, userId }) }),
+  matchCandidates: (id) => call(`/posts/${id}/match`),"""
+          new = """  postAction: (id, action, userId) =>
+    call(`/posts/${id}/action`, { method: 'POST', body: JSON.stringify({ action, userId }) }),
+  deletePost: (id) =>
+    call(`/posts/${id}/action`, { method: 'POST', body: JSON.stringify({ action: 'delete' }) }),
+  matchCandidates: (id) => call(`/posts/${id}/match`),"""
+          if old not in text:
+              raise SystemExit('src/api.js target block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ---------------- src/App.jsx ----------------
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+
+          old = """  async function denyRequest(postId, userId) {
+    await api.postAction(postId, 'deny', userId).catch(() => {});
+    refreshAll();
+  }
+
+  async function openProfile(userId) {"""
+          new = """  async function denyRequest(postId, userId) {
+    await api.postAction(postId, 'deny', userId).catch(() => {});
+    refreshAll();
+  }
+
+  async function deletePost(postId) {
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa bài "${post.title}"?\\n\\nHành động này không thể hoàn tác.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.deletePost(postId);
+      if (matchPanel?.postId === postId) setMatchPanel(null);
+      setBanner({ type: 'ok', msg: 'Đã xóa bài đăng.' });
+      await refreshAll();
+    } catch (e) {
+      setBanner({
+        type: 'err',
+        msg: e?.data?.error === 'not_owner'
+          ? 'Bạn không có quyền xóa bài đăng này.'
+          : 'Không xóa được bài đăng. Vui lòng thử lại.',
+      });
+    }
+  }
+
+  async function openProfile(userId) {"""
+          if old not in text:
+              raise SystemExit('src/App.jsx delete handler target not found')
+          text = text.replace(old, new, 1)
+
+          old = """                      {isOwner ? (
+                        <span className="text-xs text-stone-400 italic">Bài đăng của bạn</span>
+                      ) : isMember ? ("""
+          new = """                      {isOwner ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-stone-400 italic">Bài đăng của bạn</span>
+                          <button
+                            onClick={() => deletePost(p.id)}
+                            className="text-xs font-medium px-2.5 py-1 rounded-lg border text-red-600 hover:bg-red-50"
+                            style={{ borderColor: '#fecaca' }}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ) : isMember ? ("""
+          if old not in text:
+              raise SystemExit('src/App.jsx explore owner target not found')
+          text = text.replace(old, new, 1)
+
+          old = """                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-semibold text-stone-900">{p.title}</h3>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${p.status === 'completed' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {p.status === 'completed' ? 'Đã hoàn thành' : 'Đang mở'}
+                        </span>
+                      </div>"""
+          new = """                      <div className="flex items-center justify-between mb-2 gap-3">
+                        <h3 className="font-semibold text-stone-900 min-w-0">{p.title}</h3>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${p.status === 'completed' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {p.status === 'completed' ? 'Đã hoàn thành' : 'Đang mở'}
+                          </span>
+                          <button
+                            onClick={() => deletePost(p.id)}
+                            className="text-xs font-medium px-2.5 py-1 rounded-lg border text-red-600 hover:bg-red-50"
+                            style={{ borderColor: '#fecaca' }}
+                          >
+                            Xóa bài
+                          </button>
+                        </div>
+                      </div>"""
+          if old not in text:
+              raise SystemExit('src/App.jsx groups header target not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+          # ---------------- api/posts/[id]/action.js ----------------
+          path = Path('api/posts/[id]/action.js')
+          text = path.read_text(encoding='utf-8')
+          old = """  if (action === 'delete') {
+    await query('delete from posts where id = $1', [id]);
+    return res.status(200).json({ ok: true });
+  }"""
+          new = """  if (action === 'delete') {
+    // Only the owner reaches this branch. The posts table has ON DELETE CASCADE
+    // for members, join requests, and reviews, so related records are removed too.
+    const deleted = await query('delete from posts where id = $1 returning id', [id]);
+    if (deleted.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    return res.status(200).json({ ok: true, id: deleted.rows[0].id });
+  }"""
+          if old not in text:
+              raise SystemExit('backend delete target not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Verify delete-post implementation
+        run: |
+          grep -n "deletePost" src/api.js src/App.jsx
+          grep -n "Xóa bài\|>Xóa<" src/App.jsx
+          grep -n "action === 'delete'" "api/posts/[id]/action.js"
+          npm ci
+          npm run build
+
+      - name: Commit completed feature and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/api.js src/App.jsx "api/posts/[id]/action.js" .github/workflows/temp-delete-post-complete.yml
+          git commit -m "feat: complete delete post feature [delete-post-complete]"
+          git push origin feature/delete-post
