@@ -73,10 +73,30 @@ export default withCors(async function handler(req, res) {
   }
 
   if (action === 'complete') {
-    if (post.status !== 'open') return res.status(400).json({ error: 'already_completed' });
-    await query('update posts set status = $1 where id = $2 and owner_id = $3', ['completed', id, me.id]);
-    await query('delete from join_requests where post_id = $1', [id]);
-    return res.status(200).json({ ok: true });
+    const completion = await withTransaction(async (client) => {
+      const locked = await client.query(
+        'select status, owner_id from posts where id = $1 for update',
+        [id]
+      );
+      const current = locked.rows[0];
+      if (!current) return { error: 'not_found' };
+      if (current.owner_id !== me.id) return { error: 'not_owner' };
+      if (current.status !== 'open') return { error: 'already_completed' };
+
+      const updated = await client.query(
+        'update posts set status = $1 where id = $2 and owner_id = $3 and status = $4 returning id, status',
+        ['completed', id, me.id, 'open']
+      );
+      if (updated.rowCount !== 1) return { error: 'already_completed' };
+
+      await client.query('delete from join_requests where post_id = $1', [id]);
+      return { ok: true, post: updated.rows[0] };
+    });
+
+    if (completion.error === 'not_found') return res.status(404).json({ error: 'not_found' });
+    if (completion.error === 'not_owner') return res.status(403).json({ error: 'not_owner' });
+    if (completion.error === 'already_completed') return res.status(400).json({ error: 'already_completed' });
+    return res.status(200).json({ ok: true, post: completion.post });
   }
 
   return res.status(400).json({ error: 'unknown_action' });
