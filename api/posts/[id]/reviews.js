@@ -7,10 +7,9 @@ export default withCors(async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
   const { id, targetUserId } = req.query;
-  const postRes = await query('select id, title, status from posts where id = $1', [id]);
+  const postRes = await query('select id, title, status, owner_id from posts where id = $1', [id]);
   const post = postRes.rows[0];
   if (!post) return res.status(404).json({ error: 'not_found' });
-  if (post.status !== 'completed') return res.status(400).json({ error: 'project_not_completed' });
 
   const memberRes = await query(
     `select u.id, u.name, u.year, u.category
