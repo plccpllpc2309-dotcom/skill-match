@@ -52,5 +52,10 @@ export default withCors(async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
+  if (action === 'delete') {
+    await query('delete from posts where id = $1', [id]);
+    return res.status(200).json({ ok: true });
+  }
+
   return res.status(400).json({ error: 'unknown_action' });
 });
