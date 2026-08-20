@@ -1,0 +1,112 @@
+name: Apply delete-post frontend change
+
+on:
+  push:
+    branches:
+      - feature/delete-post
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/delete-post
+          fetch-depth: 0
+
+      - name: Patch App.jsx
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+
+          old_function = """  async function denyRequest(postId, userId) {
+              await api.postAction(postId, 'deny', userId).catch(() => {});
+              refreshAll();
+            }
+
+            async function openProfile(userId) {"""
+          new_function = """  async function denyRequest(postId, userId) {
+              await api.postAction(postId, 'deny', userId).catch(() => {});
+              refreshAll();
+            }
+
+            async function deletePost(postId) {
+              const post = posts.find((p) => p.id === postId);
+              if (!post) return;
+
+              const confirmed = window.confirm(
+                `Bạn có chắc muốn xóa bài \"${post.title}\"?\\n\\nHành động này không thể hoàn tác.`
+              );
+
+              if (!confirmed) return;
+
+              try {
+                await api.postAction(postId, 'delete');
+                if (matchPanel?.postId === postId) setMatchPanel(null);
+                setBanner({ type: 'ok', msg: 'Đã xóa bài đăng.' });
+                await refreshAll();
+              } catch (e) {
+                setBanner({
+                  type: 'err',
+                  msg: e?.data?.error === 'not_owner'
+                    ? 'Bạn không có quyền xóa bài đăng này.'
+                    : 'Không xóa được bài đăng. Vui lòng thử lại.',
+                });
+              }
+            }
+
+            async function openProfile(userId) {"""
+
+          if old_function not in text:
+              raise SystemExit('Could not find denyRequest/openProfile block')
+          text = text.replace(old_function, new_function, 1)
+
+          old_header = """                      <div className=\"flex items-center justify-between mb-2\">
+                        <h3 className=\"font-semibold text-stone-900\">{p.title}</h3>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${p.status === 'completed' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                          {p.status === 'completed' ? 'Đã hoàn thành' : 'Đang mở'}
+                        </span>
+                      </div>"""
+          new_header = """                      <div className=\"flex items-center justify-between mb-2 gap-3\">
+                        <h3 className=\"font-semibold text-stone-900 min-w-0\">{p.title}</h3>
+                        <div className=\"flex items-center gap-2 shrink-0\">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${p.status === 'completed' ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {p.status === 'completed' ? 'Đã hoàn thành' : 'Đang mở'}
+                          </span>
+                          <button
+                            onClick={() => deletePost(p.id)}
+                            className=\"text-xs font-medium px-2.5 py-1 rounded-lg border text-red-600 hover:bg-red-50\"
+                            style={{ borderColor: '#fecaca' }}
+                          >
+                            Xóa bài
+                          </button>
+                        </div>
+                      </div>"""
+
+          if old_header not in text:
+              raise SystemExit('Could not find myPosts header block')
+          text = text.replace(old_header, new_header, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Verify changes
+        run: |
+          grep -n "async function deletePost" src/App.jsx
+          grep -n "Xóa bài" src/App.jsx
+          grep -n "postAction(postId, 'delete')" src/App.jsx
+
+      - name: Commit frontend change and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx .github/workflows/temp-delete-post.yml
+          git commit -m "feat: add delete post UI"
+          git push origin feature/delete-post
