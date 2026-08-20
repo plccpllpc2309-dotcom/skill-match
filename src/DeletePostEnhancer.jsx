@@ -9,13 +9,13 @@ import { api } from './api';
 export default function DeletePostEnhancer() {
   useEffect(() => {
     let cancelled = false;
-    let posts = [];
+    let ownedPosts = [];
 
     async function loadPosts() {
       try {
-        const result = await api.listPosts();
+        const [postsResult, meResult] = await Promise.all([api.listPosts(), api.me()]);
         if (cancelled) return;
-        posts = result.posts || [];
+        ownedPosts = (postsResult.posts || []).filter((post) => post.ownerId === meResult.user?.id);
         injectButtons();
       } catch {
         // The main application already handles data-loading errors.
@@ -41,7 +41,7 @@ export default function DeletePostEnhancer() {
 
         // The cards in this section are already filtered by App to the current
         // user's posts. Match by title while keeping duplicate titles distinct.
-        const post = posts.find((candidate) =>
+        const post = ownedPosts.find((candidate) =>
           !usedPostIds.has(candidate.id) && candidate.title === title
         );
         if (!post) return;
