@@ -28,7 +28,7 @@ export default withCors(async function handler(req, res) {
     return res.status(200).json({ ok: true });
   }
 
-  // Remaining actions require being the post owner
+  // Remaining actions require being the post owner.
   if (post.owner_id !== me.id) {
     return res.status(403).json({ error: 'not_owner' });
   }
@@ -53,8 +53,9 @@ export default withCors(async function handler(req, res) {
   }
 
   if (action === 'delete') {
-    await query('delete from posts where id = $1', [id]);
-    return res.status(200).json({ ok: true });
+    const deleted = await query('delete from posts where id = $1 returning id', [id]);
+    if (deleted.rows.length === 0) return res.status(404).json({ error: 'not_found' });
+    return res.status(200).json({ ok: true, id: deleted.rows[0].id });
   }
 
   return res.status(400).json({ error: 'unknown_action' });
