@@ -621,9 +621,16 @@ export default function App() {
 
                       <div className="text-xs text-stone-500 mb-1.5">Thành viên ({p.members.length}/{p.slots})</div>
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {p.members.map((u) => (
-                          <span key={u.id} className="text-xs px-2 py-1 rounded-lg bg-stone-50 border text-stone-700" style={{ borderColor: '#e7e5e4' }}>{u.name}</span>
-                        ))}
+                            {p.members.map((u) => (
+                              <button
+                                key={u.id}
+                                onClick={() => openProfile(u.id)}
+                                className="text-xs px-2 py-1 rounded-lg bg-stone-50 border text-stone-700 hover:bg-stone-100"
+                                style={{ borderColor: '#e7e5e4' }}
+                              >
+                                {u.name}
+                              </button>
+                            ))}
                       </div>
 
                       {p.status === 'open' && (
@@ -647,7 +654,12 @@ export default function App() {
                                     <div key={c.id} className="flex items-center justify-between text-sm bg-white border rounded-lg px-2.5 py-1.5" style={{ borderColor: '#f0efec' }}>
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span className="text-xs font-bold text-teal-700 w-9" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{c.matchScore}%</span>
-                                        <span className="font-medium text-stone-800 truncate">{c.name}</span>
+                                        <button
+                                          onClick={() => openProfile(c.id)}
+                                          className="font-medium text-stone-800 truncate hover:underline"
+                                        >
+                                          {c.name}
+                                        </button>
                                       </div>
                                       <span className="text-[10px] text-stone-400 whitespace-nowrap">Kỹ năng {c.skillScore}% · Uy tín {c.reputation ?? '—'}</span>
                                     </div>
@@ -667,7 +679,12 @@ export default function App() {
                               <div key={u.id} className="flex items-center justify-between text-sm border rounded-lg px-3 py-1.5" style={{ borderColor: '#f0efec' }}>
                                 <div className="flex items-center gap-2">
                                   <ReputationRing score={avgScore(u.reviews)} size={24} stroke={3} showLabel={false} />
-                                  <span className="font-medium text-stone-800">{u.name}</span>
+                                  <button
+                                    onClick={() => openProfile(u.id)}
+                                    className="font-medium text-stone-800 hover:underline"
+                                  >
+                                    {u.name}
+                                  </button>
                                 </div>
                                 <div className="flex gap-1.5">
                                   <button onClick={() => approveRequest(p.id, u.id)} className="text-white p-1.5 rounded-lg" style={{ backgroundColor: '#0f766e' }}><Check size={13} /></button>
@@ -726,9 +743,12 @@ export default function App() {
                     <span className="w-6 text-center font-bold text-stone-400" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>{i + 1}</span>
                     <ReputationRing score={score} size={40} stroke={4} showLabel={false} />
                     <div className="flex-1">
-                      <div className="font-medium text-stone-800 flex items-center gap-2">
-                        {u.name}{isMe && <span className="text-xs text-teal-700">(Bạn)</span>}
-                      </div>
+                  <button
+                    onClick={() => openProfile(u.id)}
+                    className="font-medium text-stone-800 flex items-center gap-2 hover:underline text-left"
+                  >
+                    {u.name}{isMe && <span className="text-xs text-teal-700">(Bạn)</span>}
+                  </button>
                       <div className="text-xs text-stone-400">Năm {u.year}</div>
                     </div>
                     <CategoryChip id={u.category} />
