@@ -1,5 +1,3 @@
-import './projectReviewViewer.js';
-
 const BASE = '/api';
 
 async function call(path, options = {}) {
