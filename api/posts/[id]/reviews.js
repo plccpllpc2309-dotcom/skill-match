@@ -7,7 +7,7 @@ export default withCors(async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'method_not_allowed' });
 
   const { id, targetUserId } = req.query;
-  const postRes = await query('select id, title, status, owner_id from posts where id = $1', [id]);
+  const postRes = await query('select id, title, description, category, skills_needed, status, owner_id, created_at from posts where id = $1', [id]);
   const post = postRes.rows[0];
   if (!post) return res.status(404).json({ error: 'not_found' });
 
@@ -17,7 +17,6 @@ export default withCors(async function handler(req, res) {
      where pm.post_id = $1 order by pm.joined_at`,
     [id]
   );
-  if (!memberRes.rows.some((m) => m.id === me.id)) return res.status(403).json({ error: 'not_a_member' });
 
   if (targetUserId) {
     if (!memberRes.rows.some((m) => m.id === targetUserId)) return res.status(400).json({ error: 'target_not_a_member' });
@@ -32,9 +31,28 @@ export default withCors(async function handler(req, res) {
     return res.status(200).json({ post, target: memberRes.rows.find((m) => m.id === targetUserId), reviews: reviewsRes.rows });
   }
 
+  if (!memberRes.rows.some((m) => m.id === me.id)) return res.status(403).json({ error: 'not_a_member' });
+
+  const reviewsRes = await query(
+    `select r.id, r.target_user_id, r.contribution, r.punctual, r.skill, r.comment, r.created_at,
+            ru.id as reviewer_id, ru.name as reviewer_name,
+            tu.name as target_name
+     from reviews r
+     join users ru on ru.id = r.reviewer_id
+     join users tu on tu.id = r.target_user_id
+     where r.post_id = $1
+     order by tu.name, r.created_at desc`,
+    [id]
+  );
   const mineRes = await query(
     `select target_user_id from reviews where post_id = $1 and reviewer_id = $2`,
     [id, me.id]
   );
-  return res.status(200).json({ post, members: memberRes.rows, myReviewTargetIds: mineRes.rows.map((r) => r.target_user_id) });
+
+  return res.status(200).json({
+    post,
+    members: memberRes.rows,
+    myReviewTargetIds: mineRes.rows.map((r) => r.target_user_id),
+    reviewDetails: reviewsRes.rows,
+  });
 });
