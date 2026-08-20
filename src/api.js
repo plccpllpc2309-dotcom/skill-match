@@ -34,6 +34,8 @@ export const api = {
   createPost: (body) => call('/posts', { method: 'POST', body: JSON.stringify(body) }),
   postAction: (id, action, userId) =>
     call(`/posts/${id}/action`, { method: 'POST', body: JSON.stringify({ action, userId }) }),
+  deletePost: (id) =>
+    call(`/posts/${id}/action`, { method: 'POST', body: JSON.stringify({ action: 'delete' }) }),
   matchCandidates: (id) => call(`/posts/${id}/match`),
 
   submitReview: (body) => call('/reviews', { method: 'POST', body: JSON.stringify(body) }),
